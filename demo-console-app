@@ -1,0 +1,80 @@
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.sql.Timestamp;
+
+import org.apache.commons.lang3.time.StopWatch;
+
+import com.microsoft.applicationinsights.TelemetryClient;
+import com.microsoft.applicationinsights.TelemetryConfiguration;
+import com.microsoft.applicationinsights.channel.concrete.inprocess.InProcessTelemetryChannel;
+import com.microsoft.applicationinsights.telemetry.Duration;
+import com.microsoft.applicationinsights.telemetry.HttpRequestTelemetry;
+import com.microsoft.applicationinsights.telemetry.MetricTelemetry;
+import com.microsoft.applicationinsights.telemetry.SeverityLevel;
+import com.microsoft.applicationinsights.telemetry.TraceTelemetry;
+
+
+public class Demo {
+
+	// this is the instrumentation key from the Application Insights resource properties 
+    static String iKey = "28ae7050-e605-4fd3-a58d-6bf18c562248";
+    static TelemetryClient client = null;
+
+	public static void main(String[] args) throws InterruptedException, IOException {
+		InProcessTelemetryChannel channel = new InProcessTelemetryChannel();
+		channel.setDeveloperMode(true);
+
+		TelemetryConfiguration configuration = new TelemetryConfiguration();
+		configuration.setInstrumentationKey(iKey);
+		configuration.setChannel(channel);
+
+		client = new TelemetryClient(configuration);
+
+        while (AskQuestion()) 
+        {
+        }
+        
+        Thread.sleep(3000);
+	}
+	
+	static Boolean AskQuestion() throws IOException 
+    {
+		System.out.println("Should I use App insights?\r\n>>");
+        StopWatch sw = new StopWatch();
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        String answer = null;
+
+        // time the question
+        sw.start();
+        answer = br.readLine();
+        sw.stop();
+
+        // evaluate the success criteria
+        Boolean correctAnswer = answer.equals("Yes!");
+
+        // record Request event
+        HttpRequestTelemetry request = new HttpRequestTelemetry(answer, new Timestamp(System.currentTimeMillis()), new Duration(sw.getTime()), "blah", correctAnswer);
+        client.trackHttpRequest(request);
+        
+        int len = answer.length();
+        String oddeven = len % 2 == 0 ? "Even" : "Odd";
+
+        // trace answer as a log message
+        TraceTelemetry trace = new TraceTelemetry(answer, SeverityLevel.Information);
+
+        // associate trace with request
+        trace.getContext().getOperation().setId(request.getId());
+
+        // add property to log
+        trace.getProperties().put("OddEven", oddeven);
+        client.trackTrace(trace);
+        
+        // record how much time we spent on Recording this request
+        MetricTelemetry metric = new MetricTelemetry("ResponseLengthMetric", len);
+        metric.getProperties().put("OddEven", oddeven);
+        client.trackMetric(metric);
+        
+        return !correctAnswer;
+    }
+}
